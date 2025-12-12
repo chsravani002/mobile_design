@@ -221,56 +221,65 @@ import {
   Button,
   Image,
   Text,
-  PermissionsAndroid,
   Platform,
+  Alert,
+  StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
+import { check, PERMISSIONS, request, RESULTS } from "react-native-permissions";
 
 export default function App() {
   const [imageUri, setImageUri] = useState<string | null>(null);
 
   const requestCameraPermission = async () => {
-    if (Platform.OS === "ios") return true;
+    const permission =
+      Platform.OS === "ios"
+        ? PERMISSIONS.IOS.CAMERA
+        : PERMISSIONS.ANDROID.CAMERA;
 
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        {
-          title: "Camera Permission",
-          message: "This app needs access to your camera",
-          buttonPositive: "OK",
-        }
+    const result = await check(permission);
+
+    if (result === RESULTS.GRANTED) {
+      return openCamera();
+    }
+
+    if (result === RESULTS.DENIED) {
+      const req = await request(permission);
+      if (req === RESULTS.GRANTED) return openCamera();
+
+      return Alert.alert(
+        "Permission Denied",
+        "Camera access is required to open the camera."
       );
+    }
 
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch (err) {
-      return false;
+    if (result === RESULTS.BLOCKED) {
+      return Alert.alert(
+        "Permission Blocked",
+        "Enable camera permission manually in settings."
+      );
     }
   };
 
-  const openCamera = async () => {
-    const hasPermission = await requestCameraPermission();
-    if (!hasPermission) {
-      console.log("Camera permission denied");
-      return;
-    }
 
+  const openCamera = () => {
     launchCamera(
       {
         mediaType: "photo",
         cameraType: "back",
+        quality: 0.7,
       },
       (response) => {
-        if (response.didCancel) return;
+        if (response.didCancel || response.errorMessage) return;
 
-        const uri = response.assets?.[0]?.uri || null;
-        setImageUri(uri);
+        const uri = response.assets?.[0]?.uri;
+        if (uri) setImageUri(uri);
       }
     );
   };
-
+  
   const openGallery = () => {
     launchImageLibrary(
       {
@@ -286,35 +295,44 @@ export default function App() {
   };
 
   return (
-    < SafeAreaView  >
-      <Button title="Open Camera" onPress={openCamera} />
+    <SafeAreaView style={styles.container}>
+      <Button title="Open Camera" onPress={requestCameraPermission} />
 
-      <View style={{ marginTop: 10 }} />
+      <View style={styles.spacer10} />
 
       <Button title="Pick from Gallery" onPress={openGallery} />
 
       {imageUri ? (
-        <Image
-          source={{ uri: imageUri }}
-          style={{
-            width: 200,
-            height: 200,
-            marginTop: 20,
-            borderRadius: 10,
-            alignSelf: "center",
-          }}
-        />
+        <Image source={{ uri: imageUri }} style={styles.image} />
       ) : (
-        <Text
-          style={{
-            marginTop: 20,
-            textAlign: "center",
-            color: "black",
-          }}
-        >
-          No image selected
-        </Text>
+        <Text style={styles.noImageText}>No image selected</Text>
       )}
-    </ SafeAreaView >
+    </SafeAreaView>
   );
+
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+  },
+
+  spacer10: {
+    marginTop: 10,
+  },
+
+  image: {
+    width: 200,
+    height: 200,
+    marginTop: 20,
+    borderRadius: 10,
+    alignSelf: "center",
+  },
+
+  noImageText: {
+    marginTop: 20,
+    textAlign: "center",
+    color: "black",
+  },
+});
